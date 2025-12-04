@@ -3,14 +3,64 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import 'leaflet-draw';
-import type { AOIFeature } from '../lib/supabase';
 
 interface MapViewProps {
   onFeatureDrawn: (geometry: GeoJSON.Geometry) => void;
-  features: AOIFeature[];
-  onFeatureSelect: (feature: AOIFeature | null) => void;
+  features: any[];
+  onFeatureSelect: (feature: any | null) => void;
   selectedFeatureId: string | null;
-  searchLocation: { lat: number; lon: number; zoom?: number } | null;
+  searchLocation: {
+    lat: number;
+    lon: number;
+    zoom?: number;
+    boundingBox?: [number, number, number, number];
+  } | null;
+  baseLayer: string;
+  selectedGeojson?: GeoJSON.GeoJSON | null;
+  onBaseLayerChange?: (layer: string) => void;
+}
+
+function startDrawing(type: 'polygon' | 'rectangle' | 'circle') {
+  const map = (window as any).mapInstance;
+  if (!map) return;
+  
+  if (type === 'polygon') {
+    new (L.Draw as any).Polygon(map).enable();
+  } else if (type === 'rectangle') {
+    new (L.Draw as any).Rectangle(map).enable();
+  } else if (type === 'circle') {
+    new (L.Draw as any).Circle(map).enable();
+  }
+}
+
+function switchBaseLayer(layer: string, onBaseLayerChange?: (layer: string) => void) {
+  const map = (window as any).mapInstance;
+  if (!map) return;
+  
+  // Remove existing tile layers
+  map.eachLayer((l: any) => {
+    if (l instanceof L.TileLayer) {
+      map.removeLayer(l);
+    }
+  });
+  
+  let url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  let attribution = '© OpenStreetMap contributors';
+  
+  if (layer === 'satellite') {
+    url = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
+    attribution = '© Google';
+  }
+  
+  L.tileLayer(url, { 
+    maxZoom: 18,
+    attribution: attribution,
+    subdomains: layer === 'satellite' ? ['mt0', 'mt1', 'mt2', 'mt3'] : ['a', 'b', 'c']
+  }).addTo(map);
+  
+  if (onBaseLayerChange) {
+    onBaseLayerChange(layer);
+  }
 }
 
 export function MapView({
@@ -19,150 +69,247 @@ export function MapView({
   onFeatureSelect,
   selectedFeatureId,
   searchLocation,
+  baseLayer,
+  selectedGeojson,
+  onBaseLayerChange
 }: MapViewProps) {
-  const mapRef = useRef<L.Map | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
-  const [isDrawingMode, setIsDrawingMode] = useState(false);
 
+  const mapRef = useRef<L.Map | null>(null);
+  const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
+  const searchBorderLayerRef = useRef<L.Layer | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  //
+  // DRAW SELECTED GEOJSON OUTLINE
+  //
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // remove old outline
+    if (searchBorderLayerRef.current) {
+      mapRef.current.removeLayer(searchBorderLayerRef.current);
+      searchBorderLayerRef.current = null;
+    }
+
+    if (!selectedGeojson) return;
+
+    try {
+      const layer = L.geoJSON(selectedGeojson, {
+        style: {
+          color: "#c05621",
+          weight: 2,
+          dashArray: "4 4",
+          fillOpacity: 0.05
+        }
+      }).addTo(mapRef.current);
+
+      searchBorderLayerRef.current = layer;
+
+      // AUTO FIT BOUNDS
+      mapRef.current.fitBounds(layer.getBounds(), { padding: [20, 20], animate: false });
+
+    } catch (e) {
+      console.log("GeoJSON error", e);
+    }
+
+  }, [selectedGeojson]);
+
+
+  //
+  // CREATE MAP
+  //
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [51.2, 6.5],
-      zoom: 10,
-      zoomControl: false,
+      center: [20, 10],
+      zoom: 2
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 19,
+    // Initialize with the current base layer
+    let url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    let attribution = '© OpenStreetMap contributors';
+    
+    if (baseLayer === 'satellite') {
+      url = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
+      attribution = '© Google';
+    }
+
+    L.tileLayer(url, {
+      maxZoom: 18,
+      attribution: attribution,
+      subdomains: baseLayer === 'satellite' ? ['mt0', 'mt1', 'mt2', 'mt3'] : ['a', 'b', 'c']
     }).addTo(map);
 
-    const wmsLayer = L.tileLayer.wms(
-      'https://www.wms.nrw.de/geobasis/wms_nw_dop',
-      {
-        layers: 'nw_dop_overlay',
-        format: 'image/png',
-        transparent: true,
-        attribution: '© Land NRW',
-        maxZoom: 19,
-      }
-    );
-    wmsLayer.addTo(map);
-
-    const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
-    drawnItemsRef.current = drawnItems;
-
-    const drawControl = new (L as any).Control.Draw({
-      draw: {
-        polygon: {
-          allowIntersection: false,
-          showArea: true,
-        },
-        rectangle: {
-          showArea: true,
-        },
-        polyline: false,
-        circle: false,
-        circlemarker: false,
-        marker: {},
-      },
-      edit: {
-        featureGroup: drawnItems,
-        remove: false,
-      },
-    });
-    map.addControl(drawControl);
-
-    L.control.zoom({ position: 'topright' }).addTo(map);
-
-    map.on((L as any).Draw.Event.CREATED, (event: any) => {
-      const layer = event.layer;
-      drawnItems.addLayer(layer);
-
-      const geoJSON = layer.toGeoJSON();
-      onFeatureDrawn(geoJSON.geometry);
-      setIsDrawingMode(false);
-    });
-
-    map.on((L as any).Draw.Event.DRAWSTART, () => {
-      setIsDrawingMode(true);
-    });
-
-    map.on((L as any).Draw.Event.DRAWSTOP, () => {
-      setIsDrawingMode(false);
-    });
+    const fg = new L.FeatureGroup();
+    drawnItemsRef.current = fg;
+    map.addLayer(fg);
 
     mapRef.current = map;
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
-  }, [onFeatureDrawn]);
-
-  useEffect(() => {
-    if (!mapRef.current || !drawnItemsRef.current) return;
-
-    drawnItemsRef.current.clearLayers();
-
-    features.forEach((feature) => {
-      const geoJSON = L.geoJSON(feature.geometry, {
-        style: {
-          color: feature.id === selectedFeatureId ? '#f97316' : '#3b82f6',
-          weight: 3,
-          fillOpacity: 0.2,
-        },
-        pointToLayer: (_geoJsonPoint, latlng) => {
-          return L.circleMarker(latlng, {
-            radius: 8,
-            color: feature.id === selectedFeatureId ? '#f97316' : '#3b82f6',
-            fillColor: feature.id === selectedFeatureId ? '#f97316' : '#3b82f6',
-            fillOpacity: 0.5,
-            weight: 3,
-          });
-        },
-      });
-
-      geoJSON.on('click', () => {
-        onFeatureSelect(feature);
-      });
-
-      geoJSON.addTo(drawnItemsRef.current!);
+    (window as any).mapInstance = map;
+    
+    // Add drawing event listeners
+    map.on(L.Draw.Event.CREATED, (e: any) => {
+      const layer = e.layer;
+      const geoJSON = layer.toGeoJSON();
+      onFeatureDrawn(geoJSON.geometry);
     });
-  }, [features, selectedFeatureId, onFeatureSelect]);
+  }, [baseLayer]);
 
+
+  // Remove outline when a new feature is saved into features[]
+useEffect(() => {
+  if (!mapRef.current) return;
+
+  // If outline exists, remove it when AOIs change
+  if (searchBorderLayerRef.current) {
+    mapRef.current.removeLayer(searchBorderLayerRef.current);
+    searchBorderLayerRef.current = null;
+  }
+
+}, [features]);
+
+
+  //
+  // AUTO ZOOM FROM SEARCH
+  //
   useEffect(() => {
     if (!mapRef.current || !searchLocation) return;
 
-    const { lat, lon, zoom = 14 } = searchLocation;
+    const { lat, lon, zoom = 12, boundingBox } = searchLocation;
+
     mapRef.current.setView([lat, lon], zoom);
 
-    L.marker([lat, lon], {
-      icon: L.divIcon({
-        className: 'search-marker',
-        html: '<div style="background-color: #f97316; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
-        iconSize: [12, 12],
-        iconAnchor: [6, 6],
-      }),
-    }).addTo(mapRef.current);
+    if (boundingBox) {
+      const [south, north, west, east] = boundingBox;
+
+      mapRef.current.fitBounds(
+        [
+          [south, west],
+          [north, east]
+        ],
+        { padding: [20, 20], animate: false }
+      );
+    }
   }, [searchLocation]);
 
+
+  //
+  // RENDER AOI FEATURES
+  //
+  useEffect(() => {
+    if (!drawnItemsRef.current) return;
+
+    drawnItemsRef.current.clearLayers();
+
+    features.forEach((f) => {
+      const layer = L.geoJSON(f.geometry, {
+        style: {
+          color: f.id === selectedFeatureId ? "#f97316" : "#3b82f6",
+          weight: 3,
+          fillOpacity: 0.2
+        }
+      });
+
+      layer.on("click", () => onFeatureSelect(f));
+      layer.addTo(drawnItemsRef.current!);
+    });
+  }, [features, selectedFeatureId]);
+
   return (
-    <div className="relative w-full h-full">
-      <div
-        ref={mapContainerRef}
-        className="w-full h-full"
-        data-testid="map-container"
-      />
-      {isDrawingMode && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-lg shadow-lg z-[1000]">
-          <p className="text-sm text-gray-700">Click to draw your area of interest</p>
-        </div>
-      )}
+    <div className="w-full h-full">
+      <div ref={mapContainerRef} className="w-full h-full" />
+      
+   {/* Right Sidebar Toolbar */}
+<div className="absolute right-6 top-1/2 -translate-y-1/2 z-[1000]">
+
+  <div className="bg-white rounded-xl shadow-xl p-3 flex flex-col items-center gap-3 border border-gray-200">
+
+    {/* --- Drawing Tools --- */}
+    <button
+      onClick={() => startDrawing('polygon')}
+      className="p-2 hover:bg-gray-100 rounded-lg transition"
+      title="Draw Polygon"
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E28444" strokeWidth="2">
+        <path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" />
+      </svg>
+    </button>
+
+    <button
+      onClick={() => startDrawing('rectangle')}
+      className="p-2 hover:bg-gray-100 rounded-lg transition"
+      title="Draw Rectangle"
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E28444" strokeWidth="2">
+        <rect x="3" y="3" width="18" height="18" rx="3" />
+      </svg>
+    </button>
+
+    <button
+      onClick={() => startDrawing('circle')}
+      className="p-2 hover:bg-gray-100 rounded-lg transition"
+      title="Draw Circle"
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E28444" strokeWidth="2">
+        <circle cx="12" cy="12" r="9" />
+      </svg>
+    </button>
+
+    {/* Divider */}
+    <div className="w-full h-[1px] bg-gray-300" />
+
+    {/* --- Zoom Controls --- */}
+    <button
+      onClick={() => (window as any).mapInstance?.zoomIn()}
+      className="p-2 hover:bg-gray-100 rounded-lg transition"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="2">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="11" y1="8" x2="11" y2="14"/>
+        <line x1="8" y1="11" x2="14" y2="11"/>
+      </svg>
+    </button>
+
+    <button
+      onClick={() => (window as any).mapInstance?.zoomOut()}
+      className="p-2 hover:bg-gray-100 rounded-lg transition"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="2">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="8" y1="11" x2="14" y2="11"/>
+      </svg>
+    </button>
+
+    {/* Divider */}
+    <div className="w-full h-[1px] bg-gray-300" />
+
+    {/* --- Base Layer Switch --- */}
+    <button
+      onClick={() => switchBaseLayer('streets', onBaseLayerChange)}
+      className={`p-2 rounded-lg transition ${
+        baseLayer === 'streets' ? 'bg-blue-500 text-white' : 'hover:bg-gray-100'
+      }`}
+      title="Street View"
+    >
+      🗺️
+    </button>
+
+    <button
+      onClick={() => switchBaseLayer('satellite', onBaseLayerChange)}
+      className={`p-2 rounded-lg transition ${
+        baseLayer === 'satellite' ? 'bg-blue-500 text-white' : 'hover:bg-gray-100'
+      }`}
+      title="Satellite View"
+    >
+      🛰️
+    </button>
+
+  </div>
+
+</div>
+
+
     </div>
   );
 }
-

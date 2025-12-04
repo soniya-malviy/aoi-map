@@ -10,3 +10,17 @@ html, body, #root {
   height: 100%;
   width: 100%;
 }
+
+.leaflet-interactive {
+  stroke-dasharray: 6;
+  animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+  to { stroke-dashoffset: 12; }
+}
+
+
+.leaflet-draw {
+  display: none !important;
+}
