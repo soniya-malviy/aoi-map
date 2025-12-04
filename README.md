@@ -42,7 +42,7 @@ npm run build
 ```
 4. Run tests
 ```bash
-npm run test
+npm run test:e2e
 ```
 
 App runs at: http://localhost:5173
