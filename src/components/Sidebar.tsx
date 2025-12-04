@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Search, Upload, X } from 'lucide-react';
-import { useAoiStore } from '../store/useAoiStore';
+
 
 export interface GeocodeResult {
   name: string;
@@ -27,7 +27,7 @@ interface SidebarProps {
   onConfirmAOI: () => void;
 }
 
-export function Sidebar({ onLocationSelect, onFileUpload, baseLayer, onBaseLayerChange, onApplyOutline, features, onFeatureSelect, onFeatureDelete, sidebarMode, onGeojsonSelect, onConfirmAOI }: SidebarProps) {
+export function Sidebar({ onLocationSelect, onFileUpload, onApplyOutline, features, onFeatureDelete, sidebarMode, onGeojsonSelect, onConfirmAOI }: SidebarProps) {
   
   if (sidebarMode === "project") {
     return (
@@ -77,7 +77,7 @@ export function Sidebar({ onLocationSelect, onFileUpload, baseLayer, onBaseLayer
   const [showResults, setShowResults] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<GeocodeResult | null>(null);
   
-  const { addAoi } = useAoiStore();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -304,7 +304,7 @@ const applyOutlineAsBase = () => {
                   className="text-left px-4 py-3 hover:bg-orange-50 border-b last:border-none w-full"
                 >
                   <p className="font-medium text-gray-900 text-sm">{result.display_name}</p>
-                  <p className="text-xs text-gray-500">{result.type}</p>
+                  <p className="text-xs text-gray-500">Location</p>
                 </button>
               ))}
             </div>

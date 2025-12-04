@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { MapView } from "./components/MapView";
-import { FeatureList } from "./components/FeatureList";
+
 import { SaveFeatureModal } from "./components/SaveFeatureModal";
 import { aoiService } from "./services/aoiService";
 import type { AOIFeature } from "./lib/supabase";
@@ -27,9 +27,9 @@ function App() {
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarMode, setSidebarMode] = useState<"none" | "search" | "project">("search");
-  const sidebarRef = useRef<any>(null);
+
   
-  const { aois, loadFromDisk } = useAoiStore();
+  const { loadFromDisk } = useAoiStore();
 
   useEffect(() => {
     loadFeatures();
@@ -176,8 +176,6 @@ function App() {
     <div className="h-screen w-screen relative  overflow-hidden">
       <div className="absolute left-0 top-0 h-full w-[80px] z-[50] pointer-events-auto bg-transparent">
         <TransparentToolbar
-          baseLayer={baseLayer}
-          onBaseLayerChange={setBaseLayer}
           onHomeClick={() => setSidebarMode("search")}
           onProjectClick={() => setSidebarMode("project")}
         />
@@ -186,7 +184,6 @@ function App() {
       {/* LEFT SIDEBAR */}
       <div className="absolute left-[80px] top-0 w-[320px] bg-white h-full z-[40]">
         <Sidebar
-          ref={sidebarRef}
           sidebarMode={sidebarMode}
           onLocationSelect={(loc) => setSearchLocation(loc)}
           onApplyOutline={async (data) => {
@@ -196,7 +193,7 @@ function App() {
                 setFeatures(prev => [saved, ...prev]);
               }
             }
-            setSelectedGeojson(null); // Remove border
+            setSelectedGeojson(null); 
             setSearchLocation(null);
           }}
           onGeojsonSelect={(geojson) => setSelectedGeojson(geojson)}
@@ -204,12 +201,10 @@ function App() {
             setSidebarMode("project");
             setSelectedGeojson(null);
           }}
+          onCloseSidebar={() => setSidebarMode("none")}
           baseLayer={baseLayer}
-          onBaseLayerChange={(layer) => {
-            setBaseLayer(layer);
-            (window as any).setBaseLayer = setBaseLayer;
-          }}
-          onFileUpload={handleFileUpload}   // <--- important
+          onBaseLayerChange={setBaseLayer}
+          onFileUpload={handleFileUpload}
           features={features}
           onFeatureSelect={(f) => setSelectedFeatureId(f?.id || null)}
           onFeatureDelete={async (id) => {

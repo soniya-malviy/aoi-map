@@ -1,14 +1,13 @@
-import { Home, Layers, FolderOpen, Settings, Send, LayoutDashboard } from "lucide-react";
-import { useState } from "react";
-import { getAvailableBaseLayers } from "./Sidebar";
-import L from 'leaflet';
+import { Settings } from "lucide-react";
 
-export function TransparentToolbar({ baseLayer, onBaseLayerChange, onHomeClick, onProjectClick }: any) {
-  const [showMenu, setShowMenu] = useState(false);
+
+
+export function TransparentToolbar({ onHomeClick, onProjectClick }: any) {
+
 
   return (
 <div className="w-full h-full bg-[#0000007D] flex flex-col items-center py-6 space-y-6  shadow-lg border-r border-white/20">
-      <IconBtn icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#E3CDA0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>} />
+      <IconBtn icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#E3CDA0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>} />
       <IconBtn
         icon={
           <svg
@@ -52,8 +51,7 @@ export function TransparentToolbar({ baseLayer, onBaseLayerChange, onHomeClick, 
       />
 
       <div className="mt-auto relative">
-        <IconBtn icon={<Settings />} onClick={() => setShowMenu(!showMenu)} />
-
+        <IconBtn icon={<Settings />} onClick={() => {}} />
       </div>
     </div>
   );
